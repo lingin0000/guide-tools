@@ -1,0 +1,118 @@
+/* 全局样式 */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+.oss-tree-panel .ant-tree {
+  min-width: 100%;
+}
+
+.oss-file-tree .ant-tree-treenode {
+  width: 100%;
+  align-items: stretch;
+}
+
+.oss-file-tree .ant-tree-node-content-wrapper {
+  flex: 1;
+  min-width: 0;
+  padding: 0 !important;
+  display: flex;
+  align-items: center;
+}
+
+.oss-file-tree .ant-tree-title {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.oss-file-tree .ant-tree-switcher,
+.oss-file-tree .ant-tree-iconEle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.oss-file-tree .ant-tree-switcher {
+  width: 20px;
+}
+
+.oss-file-tree .ant-tree-indent-unit {
+  width: 20px;
+}
+
+.oss-file-tree .oss-tree-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 176px;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+
+.oss-file-tree .oss-tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.oss-file-tree .oss-tree-name.is-directory {
+  font-weight: 500;
+}
+
+.oss-file-tree .oss-tree-name.is-file {
+  font-weight: 400;
+}
+
+.oss-file-tree .oss-tree-time {
+  font-size: 12px;
+  white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.oss-file-tree .oss-tree-time-placeholder {
+  visibility: hidden;
+}
+
+.oss-file-tree .ant-tree-node-content-wrapper:hover .oss-tree-row {
+  background: #fafafa;
+}
+
+.oss-file-tree .ant-tree-treenode-selected .oss-tree-row,
+.oss-file-tree .ant-tree-node-selected .oss-tree-row {
+  background: #e6f4ff;
+}
+

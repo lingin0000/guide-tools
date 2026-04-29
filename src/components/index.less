@@ -1,0 +1,583 @@
+.markdown-renderer {
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, 'Apple Color Emoji', Arial, sans-serif, 'Segoe UI Emoji', 'Segoe UI Symbol';
+  line-height: 1.65;
+  color: var(--md-text-color, #37352f);
+  background-color: var(--md-bg-color, #ffffff);
+  font-size: 16px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  border-radius: 3px;
+  border: none;
+  transition: all 0.15s ease;
+  max-width: none;
+
+
+  // 基础样式重置
+  * {
+    box-sizing: border-box;
+  }
+
+  // 标题样式 - Notion风格
+  .markdown-h1,
+  .markdown-h2,
+  .markdown-h3,
+  .markdown-h4,
+  .markdown-h5,
+  .markdown-h6 {
+    margin-top: 2em;
+    margin-bottom: 4px;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--md-text-color, #37352f);
+    
+    &:first-child {
+      margin-top: 0;
+    }
+  }
+
+  .markdown-h1 {
+    font-size: 1.875em;
+    margin-bottom: 8px;
+    font-weight: 700;
+  }
+
+  .markdown-h2 {
+    font-size: 1.5em;
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+
+  .markdown-h3 {
+    font-size: 1.25em;
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+
+  .markdown-h4 {
+    font-size: 1.125em;
+    margin-bottom: 2px;
+    font-weight: 600;
+  }
+
+  .markdown-h5 {
+    font-size: 1em;
+    margin-bottom: 2px;
+    font-weight: 600;
+  }
+
+  .markdown-h6 {
+    font-size: 0.875em;
+    margin-bottom: 2px;
+    font-weight: 600;
+    color: var(--md-text-color, #787774);
+  }
+
+  // 段落样式 - Notion风格
+  .markdown-p {
+    margin: 1em 0;
+    line-height: 1.65;
+    color: var(--md-text-color, #37352f);
+  }
+
+  // 行内代码样式 - Notion风格
+  .inline-code {
+    background-color: rgba(135, 131, 120, 0.15);
+    color: #eb5757;
+    border-radius: 3px;
+    font-size: 0.85em;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+    padding: 0.2em 0.4em;
+    border: 1px solid rgba(135, 131, 120, 0.2);
+  }
+
+  // 代码块样式 - Notion风格
+  .code-block-wrapper {
+    position: relative;
+    margin: 1.5em 0;
+    border-radius: 3px;
+    overflow: hidden;
+    background-color: var(--md-code-bg, #f7f6f3);
+    border: 1px solid rgba(135, 131, 120, 0.2);
+    transition: all 0.15s ease;
+
+    &:hover {
+      // Notion风格不需要过多的hover效果
+    }
+
+    .copy-button {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      z-index: 10;
+      padding: 4px 8px;
+      background-color: rgba(255, 255, 255, 0.8);
+      border: 1px solid rgba(135, 131, 120, 0.3);
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--md-text-color, #37352f);
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-weight: 400;
+      min-width: 60px;
+      justify-content: center;
+      opacity: 0.7;
+
+      &:hover {
+        background-color: rgba(255, 255, 255, 0.95);
+        border-color: rgba(135, 131, 120, 0.4);
+        opacity: 1;
+      }
+
+      &:active {
+        transform: scale(0.98);
+      }
+
+      &-copied {
+        background-color: rgba(46, 170, 220, 0.1);
+        border-color: rgba(46, 170, 220, 0.3);
+        color: #2eaadc;
+        
+        &:hover {
+          background-color: rgba(46, 170, 220, 0.15);
+          border-color: rgba(46, 170, 220, 0.4);
+        }
+      }
+
+      &-dark {
+        background-color: rgba(55, 53, 47, 0.8);
+        border-color: rgba(255, 255, 255, 0.2);
+        color: #ffffff;
+
+        &:hover {
+          background-color: rgba(55, 53, 47, 0.9);
+          border-color: rgba(255, 255, 255, 0.3);
+        }
+      }
+
+      .copy-icon {
+        font-size: 12px;
+      }
+
+      .copy-text {
+        font-size: 11px;
+        white-space: nowrap;
+        font-weight: 400;
+      }
+    }
+  }
+
+  .code-block {
+    background-color: #f7f6f3;
+    border-radius: 3px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+    font-size: 0.85em;
+    line-height: 1.5;
+    margin: 0;
+    color: #37352f;
+
+    code {
+      background: none;
+      padding: 0;
+      border-radius: 0;
+      color: inherit;
+    }
+  }
+
+  // 语法高亮器样式 - Notion风格
+  .syntax-highlighter {
+    margin: 0 !important;
+    border-radius: 3px;
+    font-size: 0.85em !important;
+    
+    pre {
+      margin: 0 !important;
+      padding: 14px 16px !important;
+      background: transparent !important;
+    }
+
+    &.syntax-highlighter-dark {
+      pre {
+        background: transparent !important;
+      }
+    }
+  }
+
+  // 链接样式 - Notion风格
+  .markdown-link {
+    color: var(--md-link-color, #2eaadc);
+    text-decoration: underline;
+    text-decoration-color: rgba(46, 170, 220, 0.4);
+    text-underline-offset: 2px;
+    font-weight: 400;
+    transition: all 0.15s ease;
+
+    &:hover {
+      color: var(--md-link-hover-color, #0f7b8c);
+      text-decoration-color: rgba(15, 123, 140, 0.6);
+    }
+
+    &:visited {
+      color: var(--md-link-visited-color, #9065b0);
+      text-decoration-color: rgba(144, 101, 176, 0.4);
+    }
+  }
+
+  // 图片样式 - Notion风格
+  .markdown-image-wrapper {
+    margin: 1.5em 0;
+    text-align: left;
+    
+    .markdown-image {
+      max-width: 100%;
+      height: auto;
+      border-radius: 3px;
+      border: 1px solid rgba(135, 131, 120, 0.2);
+      transition: all 0.15s ease;
+      cursor: pointer;
+      
+      &:hover {
+        border-color: rgba(135, 131, 120, 0.3);
+      }
+    }
+  }
+
+  // 列表样式 - Notion风格
+  .markdown-ul,
+  .markdown-ol {
+    margin: 1em 0;
+    padding-left: 1.5em;
+    color: var(--md-text-color, #37352f);
+
+    .markdown-li {
+      margin: 0.25em 0;
+      line-height: 1.65;
+      
+      &::marker {
+        color: var(--md-text-color, #37352f);
+        font-weight: 400;
+      }
+    }
+
+    // 嵌套列表
+    ul,
+    ol {
+      margin: 0.25em 0;
+    }
+  }
+
+  .markdown-ul {
+    list-style-type: disc;
+    
+    .markdown-li {
+      &::marker {
+        color: rgba(55, 53, 47, 0.6);
+      }
+    }
+
+    .markdown-ul {
+      list-style-type: circle;
+
+      .markdown-ul {
+        list-style-type: square;
+      }
+    }
+  }
+
+  .markdown-ol {
+    list-style-type: decimal;
+    
+    .markdown-li {
+      &::marker {
+        color: rgba(55, 53, 47, 0.6);
+        font-weight: 400;
+      }
+    }
+  }
+
+  // 任务列表样式
+  .markdown-li {
+    &:has(input[type="checkbox"]) {
+      list-style: none;
+      margin-left: -20px;
+      
+      input[type="checkbox"] {
+        margin-right: 8px;
+        cursor: pointer;
+      }
+    }
+  }
+
+  // 引用样式
+  .markdown-blockquote {
+    margin: 1.5em 0;
+    padding: 16px 20px;
+    border-left: 3px solid rgba(135, 131, 120, 0.4);
+    background-color: rgba(135, 131, 120, 0.1);
+    color: var(--md-text-color, #37352f);
+    border-radius: 3px;
+    
+    .markdown-p {
+      margin: 0;
+    }
+    
+    .markdown-p:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  // 表格样式 - Notion风格
+  .table-wrapper {
+    margin: 1.5em 0;
+    overflow-x: auto;
+    border-radius: 3px;
+    border: 1px solid rgba(135, 131, 120, 0.2);
+
+    .markdown-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      background-color: var(--md-bg-color, #ffffff);
+
+      th,
+      td {
+        padding: 8px 12px;
+        text-align: left;
+        border-bottom: 1px solid rgba(135, 131, 120, 0.2);
+        border-right: 1px solid rgba(135, 131, 120, 0.2);
+
+        &:last-child {
+          border-right: none;
+        }
+      }
+
+      th {
+        background-color: rgba(135, 131, 120, 0.1);
+        font-weight: 500;
+        color: var(--md-text-color, #37352f);
+        font-size: 13px;
+      }
+
+      tr:last-child td {
+        border-bottom: none;
+      }
+
+      tr:hover {
+        background-color: rgba(135, 131, 120, 0.05);
+      }
+    }
+  }
+
+  // 分割线样式 - Notion风格
+  .markdown-hr {
+    height: 1px;
+    background-color: rgba(135, 131, 120, 0.3);
+    border: none;
+    margin: 2em 0;
+  }
+
+  // 强调样式 - Notion风格
+  .markdown-strong {
+    font-weight: 600;
+    color: var(--md-text-color, #37352f);
+  }
+
+  .markdown-em {
+    font-style: italic;
+    color: var(--md-text-color, #37352f);
+  }
+
+  // 删除线样式 - Notion风格
+  .markdown-del {
+    text-decoration: line-through;
+    color: rgba(55, 53, 47, 0.6);
+  }
+
+  // 下划线样式 - Notion风格
+  u {
+    text-decoration: underline;
+    text-decoration-color: rgba(55, 53, 47, 0.4);
+    text-underline-offset: 2px;
+  }
+
+  // 滚动条样式
+  &.markdown-renderer-scrollable {
+    &::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 4px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: #c1c1c1;
+      border-radius: 4px;
+
+      &:hover {
+        background: #a8a8a8;
+      }
+    }
+  }
+
+  // 响应式设计
+  @media (max-width: 768px) {
+    padding: 12px;
+    font-size: 14px;
+
+    .markdown-h1 {
+      font-size: 1.75em;
+    }
+
+    .markdown-h2 {
+      font-size: 1.5em;
+    }
+
+    .markdown-h3 {
+      font-size: 1.25em;
+    }
+
+    .code-block,
+    .syntax-highlighter pre {
+      padding: 12px !important;
+      font-size: 0.8em !important;
+    }
+
+    .markdown-table {
+      font-size: 0.85em;
+      min-width: 500px;
+
+      th,
+      td {
+        padding: 8px 12px;
+      }
+    }
+
+    .copy-button {
+      .copy-text {
+        display: none;
+      }
+    }
+  }
+
+  // 暗色主题 - Notion风格
+  &.markdown-renderer-dark {
+    color: rgba(255, 255, 255, 0.9);
+    background-color: #191919;
+
+    .markdown-h1,
+    .markdown-h2,
+    .markdown-h3,
+    .markdown-h4,
+    .markdown-h5,
+    .markdown-h6 {
+      color: rgba(255, 255, 255, 0.9);
+    }
+
+    .inline-code {
+      background-color: rgba(255, 255, 255, 0.1);
+      color: #eb5757;
+    }
+
+    .code-block {
+      background-color: rgba(255, 255, 255, 0.05);
+    }
+
+    .markdown-link {
+      color: #5ba2f0;
+
+      &:hover {
+        color: #7bb3f0;
+      }
+
+      &:visited {
+        color: #9f7aea;
+      }
+    }
+
+    .markdown-blockquote {
+      border-left-color: rgba(255, 255, 255, 0.2);
+      background-color: rgba(255, 255, 255, 0.05);
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .table-wrapper {
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .markdown-table {
+      th {
+        background-color: rgba(255, 255, 255, 0.05);
+        color: rgba(255, 255, 255, 0.9);
+      }
+
+      th,
+      td {
+        border-bottom-color: rgba(255, 255, 255, 0.1);
+        border-right-color: rgba(255, 255, 255, 0.1);
+      }
+
+      tbody tr:hover {
+        background-color: rgba(255, 255, 255, 0.03);
+      }
+    }
+
+    .markdown-hr {
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .markdown-strong {
+      color: rgba(255, 255, 255, 0.9);
+    }
+
+    .markdown-del {
+      color: rgba(255, 255, 255, 0.5);
+    }
+
+    u {
+      text-decoration-color: rgba(255, 255, 255, 0.4);
+    }
+
+    // 暗色主题滚动条
+    &.markdown-renderer-scrollable {
+      &::-webkit-scrollbar-track {
+        background: #21262d;
+      }
+
+      &::-webkit-scrollbar-thumb {
+        background: #30363d;
+
+        &:hover {
+          background: #484f58;
+        }
+      }
+    }
+  }
+
+  // 打印样式
+  @media print {
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+
+    .copy-button {
+      display: none !important;
+    }
+
+    .markdown-link {
+      color: black !important;
+      text-decoration: underline !important;
+    }
+
+    .code-block,
+    .syntax-highlighter {
+      background: #f5f5f5 !important;
+      border: 1px solid #ddd !important;
+    }
+  }
+}
