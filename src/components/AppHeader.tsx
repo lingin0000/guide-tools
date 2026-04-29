@@ -445,20 +445,6 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             <Text type="secondary">当前版本：</Text>
             <Text>{appVersion}</Text>
           </div>
-          <div>
-            <Text type="secondary">更新清单 URL：</Text>
-            <Input value={DEFAULT_UPDATER_ENDPOINT} readOnly />
-          </div>
-          {DEFAULT_UPDATER_ENDPOINT ? (
-            <Text type="secondary">
-              默认更新地址：{DEFAULT_UPDATER_ENDPOINT}
-            </Text>
-          ) : (
-            <Text type="secondary">
-              可在构建时设置 `VITE_GITHUB_REPOSITORY`、`VITE_UPDATE_FEED_URL` 或
-              `VITE_UPDATER_ENDPOINT` 作为默认更新地址。
-            </Text>
-          )}
           {updateStatusText ? (
             <Space align="center">
               <ReloadOutlined spin={isCheckingUpdate || isInstallingUpdate} />
