@@ -9,11 +9,12 @@ const store = await Store.load('app_data.json');
 
 export async function getConfig() {
   return {
-    ossConfig: (await store.get('ossConfig')) || {},
-    cachePath: (await store.get<string>('cachePath')) || '',
-    markdownFolders: (await store.get<MarkdownFolderConfig[]>('markdownFolders')) || [],
-    activeMarkdownFolderPath: (await store.get<string>('activeMarkdownFolderPath')) || '',
-    updateFeedUrl: (await store.get<string>('updateFeedUrl')) || '',
+    ossConfig: (await store.get("ossConfig")) || {},
+    cachePath: (await store.get<string>("cachePath")) || "",
+    markdownFolders:
+      (await store.get<MarkdownFolderConfig[]>("markdownFolders")) || [],
+    activeMarkdownFolderPath:
+      (await store.get<string>("activeMarkdownFolderPath")) || "",
   };
 }
 
@@ -34,14 +35,5 @@ export async function setMarkdownFolders(markdownFolders: MarkdownFolderConfig[]
 
 export async function setActiveMarkdownFolderPath(activeMarkdownFolderPath: string) {
   await store.set('activeMarkdownFolderPath', activeMarkdownFolderPath);
-  await store.save();
-}
-
-export async function getUpdateFeedUrl() {
-  return (await store.get<string>('updateFeedUrl')) || '';
-}
-
-export async function setUpdateFeedUrl(updateFeedUrl: string) {
-  await store.set('updateFeedUrl', updateFeedUrl);
   await store.save();
 }

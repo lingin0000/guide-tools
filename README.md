@@ -216,6 +216,33 @@ cargo build --verbose
 pnpm tauri dev
 ```
 
+## 发布与更新
+
+### GitHub Release
+
+- 仓库已支持通过 GitHub Actions 自动构建桌面安装包。
+- 当推送形如 `v1.0.0` 的标签后，会触发 `.github/workflows/release.yml` 并创建对应 Release。
+- 工作流会读取 `TAURI_SIGNING_PRIVATE_KEY`，生成带签名的 updater 产物，并上传 `latest.json` 到 GitHub Release。
+- 应用内原生更新器会默认请求当前仓库的 `releases/latest/download/latest.json`。
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+### 检查更新
+
+- 顶部栏“检查更新”按钮已启用。
+- 默认读取 GitHub Release 中的 `latest.json`，在应用内自动下载并安装。
+- Windows 下安装完成后会自动退出当前应用，随后重启到新版本。
+- 当前版本号以 Tauri 运行时版本为准，避免前端 `package.json` 与桌面应用版本不一致导致误判。
+
+### Updater 密钥
+
+- 已在本地生成 updater 密钥，私钥文件位于 `.tauri/guide-tools-updater.key`，该文件不会提交到仓库。
+- 请将私钥文件内容保存到 GitHub Actions Secret：`TAURI_SIGNING_PRIVATE_KEY`。
+- 公钥已写入 `src-tauri/tauri.conf.json`，供应用校验更新包签名。
+
 ## 常见问题
 
 ### Q: Pandoc 未找到

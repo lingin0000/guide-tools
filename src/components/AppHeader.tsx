@@ -22,13 +22,16 @@ import {
   CopyOutlined,
   QuestionCircleOutlined,
   CloudSyncOutlined,
+  ReloadOutlined,
 } from "@ant-design/icons";
+import { getVersion } from "@tauri-apps/api/app";
+import { ask } from "@tauri-apps/plugin-dialog";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { check } from "@tauri-apps/plugin-updater";
 import OSSConfig from "./OSSConfig";
 import appPackage from "../../package.json";
-import { getUpdateFeedUrl, setUpdateFeedUrl } from "../utils/configStore";
-import { checkForUpdate, type UpdateResult } from "../utils/updateCheck";
+import { DEFAULT_UPDATER_ENDPOINT } from "../utils/updateConfig";
 
 const { Header } = Layout;
 const { Text, Title } = Typography;
@@ -72,7 +75,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   onCheckPandoc,
   onPageChange,
 }) => {
-  const appVersion = appPackage.version;
+  const fallbackVersion = appPackage.version;
   const hasValidOSSConfig = Boolean(
     ossConfig?.access_key_id &&
     ossConfig?.access_key_secret &&
@@ -81,11 +84,33 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   );
 
   const [updateModalOpen, setUpdateModalOpen] = React.useState(false);
-  const [updateFeedUrl, setUpdateFeedUrlState] = React.useState("");
+  const [appVersion, setAppVersion] = React.useState(fallbackVersion);
   const [isCheckingUpdate, setIsCheckingUpdate] = React.useState(false);
-  const [updateResult, setUpdateResult] = React.useState<UpdateResult | null>(
-    null,
-  );
+  const [isInstallingUpdate, setIsInstallingUpdate] = React.useState(false);
+  const [updateStatusText, setUpdateStatusText] = React.useState("");
+  const [latestVersion, setLatestVersion] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const version = await getVersion();
+        if (!cancelled) {
+          // 运行时优先使用 Tauri 实际版本，避免和 package.json 版本不一致。
+          setAppVersion(version);
+        }
+      } catch {
+        if (!cancelled) {
+          setAppVersion(fallbackVersion);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fallbackVersion]);
 
   const usageItems = React.useMemo(
     () => [
@@ -149,60 +174,82 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     }
   };
 
-  React.useEffect(() => {
-    if (!updateModalOpen) {
+  const handleCheckUpdate = async () => {
+    if (isCheckingUpdate || isInstallingUpdate) {
       return;
     }
 
-    let cancelled = false;
-    void (async () => {
-      try {
-        const saved = await getUpdateFeedUrl();
-        if (!cancelled) {
-          setUpdateFeedUrlState(saved);
-        }
-      } catch {
-        if (!cancelled) {
-          setUpdateFeedUrlState("");
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [updateModalOpen]);
-
-  const handleCheckUpdate = async () => {
     try {
-      setIsCheckingUpdate(true);
-      await setUpdateFeedUrl(updateFeedUrl);
-      const result = await checkForUpdate(appVersion, updateFeedUrl);
-      setUpdateResult(result);
-      if (result.status === "no_source") {
-        message.warning("请先配置更新源 URL");
-      } else if (result.status === "up_to_date") {
-        message.success("当前已是最新版本");
-      } else {
-        message.info(`发现新版本：${result.latestVersion}`);
+      if (!DEFAULT_UPDATER_ENDPOINT) {
+        message.warning("请先在应用配置中设置默认更新地址");
+        return;
       }
+
+      setIsCheckingUpdate(true);
+      setUpdateStatusText("正在检查更新...");
+      setLatestVersion(null);
+      const update = await check();
+
+      if (!update) {
+        setUpdateStatusText("当前已是最新版本");
+        message.success("当前已是最新版本");
+        return;
+      }
+
+      setLatestVersion(update.version);
+      setUpdateStatusText(`发现新版本 ${update.version}，准备下载并安装`);
+
+      const confirmed = await ask(
+        `检测到新版本 ${update.version}，是否立即下载并安装？`,
+        {
+          title: "发现新版本",
+          kind: "info",
+          okLabel: "立即更新",
+          cancelLabel: "稍后再说",
+        },
+      );
+      if (!confirmed) {
+        setUpdateStatusText(`已发现新版本 ${update.version}，你可以稍后安装`);
+        return;
+      }
+
+      setIsInstallingUpdate(true);
+      setUpdateStatusText("正在下载更新...");
+      let downloadedBytes = 0;
+      let totalBytes = 0;
+      await update.downloadAndInstall((event) => {
+        if (event.event === "Started") {
+          totalBytes = event.data.contentLength || 0;
+          setUpdateStatusText("开始下载更新包...");
+          return;
+        }
+        if (event.event === "Progress") {
+          downloadedBytes += event.data.chunkLength;
+          if (!totalBytes) {
+            setUpdateStatusText("正在下载更新包...");
+            return;
+          }
+
+          const progress = Math.min(
+            100,
+            Math.round((downloadedBytes / totalBytes) * 100),
+          );
+          setUpdateStatusText(`正在下载更新包... ${progress}%`);
+          return;
+        }
+
+        setUpdateStatusText("下载完成，正在安装更新...");
+      });
+
+      setUpdateStatusText("更新安装完成，正在重启应用...");
+      message.success("更新已安装，应用即将重启");
+      await relaunch();
     } catch (error) {
-      setUpdateResult(null);
+      setUpdateStatusText("");
       message.error(`检查更新失败：${String(error)}`);
     } finally {
       setIsCheckingUpdate(false);
-    }
-  };
-
-  const handleOpenUpdateLink = async (url?: string) => {
-    if (!url) {
-      message.warning("未提供下载链接");
-      return;
-    }
-    try {
-      await openUrl(url);
-    } catch (error) {
-      message.error(`打开链接失败：${String(error)}`);
+      setIsInstallingUpdate(false);
     }
   };
 
@@ -318,19 +365,18 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             <Button
               size="small"
               type="link"
-              disabled
               icon={<CloudSyncOutlined />}
               onClick={() => {
                 setUpdateModalOpen(true);
-                setUpdateResult(null);
+                setLatestVersion(null);
+                setUpdateStatusText("");
               }}
             >
               检查更新
             </Button>
             <Tag>v{appVersion}</Tag>
-            {updateResult?.status === "update_available" &&
-            updateResult.latestVersion ? (
-              <Tag color="warning">可更新到 {updateResult.latestVersion}</Tag>
+            {latestVersion ? (
+              <Tag color="warning">可更新到 {latestVersion}</Tag>
             ) : null}
             <Tag color={hasValidOSSConfig ? "success" : "warning"}>
               {hasValidOSSConfig ? "OSS 已配置" : "OSS 待配置"}
@@ -386,10 +432,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             <Button onClick={() => setUpdateModalOpen(false)}>关闭</Button>
             <Button
               type="primary"
-              loading={isCheckingUpdate}
+              loading={isCheckingUpdate || isInstallingUpdate}
               onClick={() => void handleCheckUpdate()}
             >
-              检查
+              检查并安装
             </Button>
           </Space>
         }
@@ -400,51 +446,23 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             <Text>{appVersion}</Text>
           </div>
           <div>
-            <Text type="secondary">更新源 URL：</Text>
-            <Input
-              value={updateFeedUrl}
-              onChange={(event) => setUpdateFeedUrlState(event.target.value)}
-              placeholder="支持 GitHub releases/latest 或自定义 {version, downloadUrl, notes} JSON"
-            />
+            <Text type="secondary">更新清单 URL：</Text>
+            <Input value={DEFAULT_UPDATER_ENDPOINT} readOnly />
           </div>
-          {updateResult?.status === "up_to_date" ? (
+          {DEFAULT_UPDATER_ENDPOINT ? (
             <Text type="secondary">
-              最新版本：{updateResult.latestVersion || appVersion}
+              默认更新地址：{DEFAULT_UPDATER_ENDPOINT}
             </Text>
-          ) : null}
-          {updateResult?.status === "update_available" ? (
-            <Space direction="vertical" style={{ width: "100%" }} size={8}>
-              <Text>
-                发现新版本：{updateResult.latestVersion}（当前 {appVersion}）
-              </Text>
-              <Space wrap>
-                <Button
-                  type="primary"
-                  onClick={() =>
-                    void handleOpenUpdateLink(
-                      updateResult.downloadUrl || updateResult.releaseUrl,
-                    )
-                  }
-                >
-                  打开下载页
-                </Button>
-                {updateResult.releaseUrl ? (
-                  <Button
-                    onClick={() =>
-                      void handleOpenUpdateLink(updateResult.releaseUrl)
-                    }
-                  >
-                    打开发布页
-                  </Button>
-                ) : null}
-              </Space>
-              {updateResult.notes ? (
-                <Input.TextArea
-                  value={updateResult.notes}
-                  readOnly
-                  autoSize={{ minRows: 6, maxRows: 12 }}
-                />
-              ) : null}
+          ) : (
+            <Text type="secondary">
+              可在构建时设置 `VITE_GITHUB_REPOSITORY`、`VITE_UPDATE_FEED_URL` 或
+              `VITE_UPDATER_ENDPOINT` 作为默认更新地址。
+            </Text>
+          )}
+          {updateStatusText ? (
+            <Space align="center">
+              <ReloadOutlined spin={isCheckingUpdate || isInstallingUpdate} />
+              <Text>{updateStatusText}</Text>
             </Space>
           ) : null}
         </Space>

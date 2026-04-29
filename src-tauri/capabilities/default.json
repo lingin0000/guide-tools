@@ -6,9 +6,11 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "dialog:allow-open",
-    "dialog:allow-save",
+    "dialog:default",
+    "http:default",
+    "process:default",
     "store:allow-load",
-    "store:default"
+    "store:default",
+    "updater:default"
   ]
 }
