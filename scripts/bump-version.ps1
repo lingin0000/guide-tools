@@ -60,12 +60,20 @@ function Update-VersionLine {
   param(
     [string]$FilePath,
     [string]$Pattern,
-    [string]$Replacement
+    [string]$Version
   )
 
   $content = Get-Content -Path $FilePath -Raw -Encoding UTF8
   $regex = [regex]::new($Pattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)
-  $updated = $regex.Replace($content, $Replacement, 1)
+  # Use a match evaluator to avoid "$11.0.0" style backreference ambiguity.
+  $updated = $regex.Replace(
+    $content,
+    [System.Text.RegularExpressions.MatchEvaluator]{
+      param($match)
+      return $match.Groups[1].Value + $Version + $match.Groups[2].Value
+    },
+    1
+  )
   if ($content -eq $updated) {
     throw "Failed to update version in $FilePath. Check whether the file format has changed."
   }
@@ -87,9 +95,9 @@ if ($DryRun) {
 }
 
 # Only replace the first match to avoid touching dependency versions.
-Update-VersionLine -FilePath $packageJsonPath -Pattern '("version"\s*:\s*")[^"]+(")' -Replacement ('$1' + $nextVersion + '$2')
-Update-VersionLine -FilePath $tauriConfigPath -Pattern '("version"\s*:\s*")[^"]+(")' -Replacement ('$1' + $nextVersion + '$2')
-Update-VersionLine -FilePath $cargoTomlPath -Pattern '^(version\s*=\s*")[^"]+(")' -Replacement ('$1' + $nextVersion + '$2')
+Update-VersionLine -FilePath $packageJsonPath -Pattern '("version"\s*:\s*")[^"]+(")' -Version $nextVersion
+Update-VersionLine -FilePath $tauriConfigPath -Pattern '("version"\s*:\s*")[^"]+(")' -Version $nextVersion
+Update-VersionLine -FilePath $cargoTomlPath -Pattern '^(version\s*=\s*")[^"]+(")' -Version $nextVersion
 
 Write-Host "Version synced to $nextVersion"
 Write-Host "package.json: $packageVersion -> $nextVersion"

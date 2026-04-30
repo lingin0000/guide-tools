@@ -55,7 +55,7 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: Guide Tools ${{ github.ref_name }}
           releaseBody: |
-            请在这里填写本次版本更新说明。
+            首次发版。
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
