@@ -21,6 +21,11 @@ interface ResolvedImagePath {
   resolved_path: string;
 }
 
+interface UniqueImageUploadTask {
+  original_path: string;
+  resolved_path: string;
+}
+
 export type UploadEnvironment = "dev" | "release";
 
 const normalizeOSSPrefix = (prefix?: string) =>
@@ -41,6 +46,16 @@ const buildEnvironmentOSSConfig = (
   return {
     ...ossConfig,
     file_path: [basePrefix, envPrefix].filter(Boolean).join("/"),
+  };
+};
+
+const buildSharedImageOSSConfig = (ossConfig: OSSConfig): OSSConfig => {
+  const basePrefix = normalizeOSSPrefix(ossConfig.file_path);
+
+  return {
+    ...ossConfig,
+    // 图片走共享目录，避免 release 复用 dev Markdown 时还需要再复制图片。
+    file_path: [basePrefix, "images"].filter(Boolean).join("/"),
   };
 };
 
@@ -74,6 +89,7 @@ export const useOSSOperations = () => {
     try {
       setIsUploading(true);
       const targetOSSConfig = buildEnvironmentOSSConfig(ossConfig, environment);
+      const sharedImageOSSConfig = buildSharedImageOSSConfig(ossConfig);
       const resolvedImagePaths = await invoke<ResolvedImagePath[]>(
         "resolve_markdown_image_paths",
         {
@@ -83,42 +99,102 @@ export const useOSSOperations = () => {
       );
 
       let finalMarkdown = markdownContent;
+      const uploadedImageUrls: string[] = [];
       if (resolvedImagePaths.length > 0) {
-        const uploadResults = await Promise.all(
-          resolvedImagePaths.map(async (imagePath) => {
-            const uploaded = await invoke<ImageUploadResult>(
-              "upload_image_to_oss",
-              {
-                imagePath: imagePath.resolved_path,
-                ossConfig: targetOSSConfig,
-              },
+        // 基于实际文件路径去重，避免同一张图片在 Markdown 中多次引用时重复上传。
+        const uniqueTasks = Array.from(
+          resolvedImagePaths
+            .reduce((taskMap, imagePath) => {
+              if (!taskMap.has(imagePath.resolved_path)) {
+                taskMap.set(imagePath.resolved_path, {
+                  original_path: imagePath.original_path,
+                  resolved_path: imagePath.resolved_path,
+                });
+              }
+              return taskMap;
+            }, new Map<string, UniqueImageUploadTask>())
+            .values(),
+        );
+        const uploadedByResolvedPath = new Map<string, ImageUploadResult>();
+
+        try {
+          await Promise.all(
+            uniqueTasks.map(async (imagePath) => {
+              const uploaded = await invoke<ImageUploadResult>(
+                "upload_image_to_oss",
+                {
+                  imagePath: imagePath.resolved_path,
+                  ossConfig: sharedImageOSSConfig,
+                },
+              );
+              uploadedImageUrls.push(uploaded.oss_url);
+              uploadedByResolvedPath.set(imagePath.resolved_path, uploaded);
+              return uploaded;
+            }),
+          );
+
+          const imageMappings = resolvedImagePaths.map((imagePath) => {
+            const uploaded = uploadedByResolvedPath.get(
+              imagePath.resolved_path,
             );
+            if (!uploaded) {
+              throw new Error(`图片上传结果缺失：${imagePath.resolved_path}`);
+            }
 
             return {
               ...uploaded,
               original_path: imagePath.original_path,
             };
-          }),
-        );
+          });
 
-        finalMarkdown = await invoke<string>("replace_image_links", {
-          markdown: markdownContent,
-          imageMappings: uploadResults,
-        });
-        setMarkdownContent(finalMarkdown);
+          finalMarkdown = await invoke<string>("replace_image_links", {
+            markdown: markdownContent,
+            imageMappings,
+          });
+          setMarkdownContent(finalMarkdown);
+        } catch (imageUploadError) {
+          if (uploadedImageUrls.length > 0) {
+            try {
+              await invoke<number>("delete_oss_objects", {
+                ossUrls: uploadedImageUrls,
+                ossConfig: sharedImageOSSConfig,
+              });
+            } catch (rollbackError) {
+              console.error("回滚已上传图片失败:", rollbackError);
+            }
+          }
+
+          throw new Error(`图片上传失败：${String(imageUploadError)}`);
+        }
       }
 
-      const uploadResult = await invoke<string>("upload_content_to_oss", {
-        content: finalMarkdown,
-        ossConfig: targetOSSConfig,
-        fileName,
-      });
+      try {
+        const uploadResult = await invoke<string>("upload_content_to_oss", {
+          content: finalMarkdown,
+          ossConfig: targetOSSConfig,
+          fileName,
+        });
 
-      message.success(`Markdown 上传成功！OSS地址: ${uploadResult}`);
-      return true;
+        message.success(`Markdown 上传成功！OSS地址: ${uploadResult}`);
+        return true;
+      } catch (markdownUploadError) {
+        if (uploadedImageUrls.length > 0) {
+          try {
+            await invoke<number>("delete_oss_objects", {
+              ossUrls: uploadedImageUrls,
+              ossConfig: sharedImageOSSConfig,
+            });
+          } catch (rollbackError) {
+            console.error("Markdown 上传失败后回滚图片失败:", rollbackError);
+          }
+        }
+
+        setMarkdownContent(markdownContent);
+        throw new Error(`Markdown 上传失败：${String(markdownUploadError)}`);
+      }
     } catch (error) {
       console.error("Markdown 上传失败:", error);
-      message.error("Markdown 上传失败");
+      message.error(String(error));
       return false;
     } finally {
       setIsUploading(false);

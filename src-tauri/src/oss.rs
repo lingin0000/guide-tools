@@ -172,6 +172,33 @@ fn join_oss_path(base_prefix: &str, child: &str) -> String {
     }
 }
 
+fn sanitize_oss_file_name(file_name: &str) -> String {
+    file_name
+        .chars()
+        .map(|ch| match ch {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '_' | '-' => ch,
+            _ => '_',
+        })
+        .collect()
+}
+
+fn build_image_object_key(oss_dir: &str, file_name: &str) -> String {
+    let now = chrono::Local::now();
+    let date_folder = now.format("%Y/%m/%d").to_string();
+    let readable_timestamp = now.format("%Y%m%d-%H%M%S-%3f").to_string();
+    let sanitized_file_name = sanitize_oss_file_name(file_name);
+    let base_prefix = oss_dir.trim().trim_matches('/');
+
+    if base_prefix.is_empty() {
+        format!("{}/{}_{}", date_folder, readable_timestamp, sanitized_file_name)
+    } else {
+        format!(
+            "{}/{}/{}_{}",
+            base_prefix, date_folder, readable_timestamp, sanitized_file_name
+        )
+    }
+}
+
 fn display_oss_path(path: &str) -> String {
     path.trim_end_matches('/').to_string()
 }
@@ -919,13 +946,66 @@ async fn copy_oss_object(
     }
 }
 
+async fn delete_oss_object(object_key: &str, oss_config: &OSSConfig) -> Result<(), OSSError> {
+    oss_config.validate()?;
+
+    let endpoint = oss_config.get_endpoint();
+    let url = build_oss_object_url(&endpoint, object_key);
+    let date = chrono::Utc::now()
+        .format("%a, %d %b %Y %H:%M:%S GMT")
+        .to_string();
+    let canonicalized_resource = format!("/{}/{}", oss_config.bucket, object_key);
+    let authorization = build_authorization_header(
+        "DELETE",
+        "",
+        &date,
+        "",
+        &canonicalized_resource,
+        &oss_config.access_key_id,
+        &oss_config.access_key_secret,
+    );
+
+    let response = Client::new()
+        .delete(&url)
+        .header("Authorization", authorization)
+        .header("Date", date)
+        .send()
+        .await?;
+
+    if response.status().is_success() || response.status().as_u16() == 404 {
+        Ok(())
+    } else {
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Unknown error".to_string());
+        Err(OSSError::UploadFailed(error_text))
+    }
+}
+
+fn oss_object_key_from_url(oss_url: &str, oss_config: &OSSConfig) -> Result<String, OSSError> {
+    let endpoint = oss_config.get_endpoint();
+    if let Some(stripped) = oss_url.strip_prefix(&format!("{}/", endpoint.trim_end_matches('/'))) {
+        return Ok(stripped.trim_start_matches('/').to_string());
+    }
+
+    let parsed = reqwest::Url::parse(oss_url)
+        .map_err(|error| OSSError::InvalidPath(format!("无效的 OSS URL：{error}")))?;
+    let object_key = parsed.path().trim_start_matches('/').to_string();
+    if object_key.is_empty() {
+        return Err(OSSError::InvalidPath("无法从 OSS URL 中解析对象路径".to_string()));
+    }
+
+    Ok(object_key)
+}
+
 #[tauri::command]
 pub async fn copy_oss_environment_folder(
     oss_config: OSSConfig,
     source_env: String,
     target_env: String,
 ) -> Result<usize, String> {
-    let result = async {
+    let result: Result<usize, OSSError> = async {
         oss_config.validate()?;
 
         let source_prefix = normalize_oss_prefix(&join_oss_path(&oss_config.get_oss_dir(), &source_env));
@@ -959,7 +1039,32 @@ pub async fn copy_oss_environment_folder(
     }
     .await;
 
-    result.map_err(|e| e.to_string())
+    result.map_err(|e: OSSError| e.to_string())
+}
+
+#[tauri::command]
+pub async fn delete_oss_objects(
+    oss_urls: Vec<String>,
+    oss_config: OSSConfig,
+) -> Result<usize, String> {
+    let result: Result<usize, OSSError> = async {
+        oss_config.validate()?;
+
+        let mut deleted_count = 0usize;
+        for oss_url in oss_urls {
+            let object_key = oss_object_key_from_url(&oss_url, &oss_config)?;
+            delete_oss_object(&object_key, &oss_config).await?;
+            deleted_count += 1;
+        }
+
+        Ok(deleted_count)
+    }
+    .await;
+
+    match result {
+        Ok(deleted_count) => Ok(deleted_count),
+        Err(error) => Err(error.to_string()),
+    }
 }
 
 // 上传图片到阿里云OSS
@@ -984,9 +1089,8 @@ pub async fn upload_image_to_oss(
             .and_then(|name| name.to_str())
             .ok_or_else(|| OSSError::InvalidPath("Invalid file name".to_string()))?;
 
-        let timestamp = chrono::Utc::now().timestamp();
         let oss_dir = oss_config.get_oss_dir();
-        let oss_key = format!("{}/{}/{}", oss_dir, timestamp, file_name);
+        let oss_key = build_image_object_key(&oss_dir, file_name);
         
         // 获取内容类型
         let content_type = get_content_type(&image_path);

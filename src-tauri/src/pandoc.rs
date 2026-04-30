@@ -25,22 +25,43 @@ pub async fn check_pandoc(_app_handle: tauri::AppHandle) -> Result<bool, String>
     Ok(output.status.success())
 }
 
-// 移除Markdown中图片的属性
+// 移除 Markdown 图片尾随属性中的 width/height，保留其他合法属性。
 fn remove_image_properties(content: String) -> Result<String, String> {
     let re = Regex::new(
         r"(?x)
-        (![\[^\]]*\])   # 图片描述部分
-        (\([^)]+\))     # 图片路径部分
-        \s*             # 可选空白
-        \{              # 开始的花括号
-        [^}]*width=[^}]+ # 匹配包含 width= 的属性
-        [^}]*           # 其他属性
-        \}              # 结束的花括号
+        (!\[[^\]]*\])      # 图片描述部分
+        (\([^)]+\))        # 图片路径部分
+        (\s*\{[^}]*\})?    # 可选属性块
         ",
     )
     .expect("无效的正则表达式");
     let cleaned_markdown = re.replace_all(&content, |caps: &regex::Captures| {
-        format!("{}{}", &caps[1], &caps[2])
+        let attributes = caps.get(3).map(|value| value.as_str()).unwrap_or("");
+        if attributes.is_empty() {
+            return format!("{}{}", &caps[1], &caps[2]);
+        }
+
+        let trimmed_attributes = attributes
+            .trim()
+            .trim_start_matches('{')
+            .trim_end_matches('}')
+            .split_whitespace()
+            .filter(|segment| {
+                let lower_segment = segment.to_ascii_lowercase();
+                !lower_segment.starts_with("width=") && !lower_segment.starts_with("height=")
+            })
+            .collect::<Vec<_>>();
+
+        if trimmed_attributes.is_empty() {
+            format!("{}{}", &caps[1], &caps[2])
+        } else {
+            format!(
+                "{}{} {{{}}}",
+                &caps[1],
+                &caps[2],
+                trimmed_attributes.join(" ")
+            )
+        }
     });
     Ok(cleaned_markdown.to_string())
 }

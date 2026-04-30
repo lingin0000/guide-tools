@@ -42,6 +42,7 @@ pub fn run() {
             oss::upload_image_to_oss,
             oss::upload_file_to_oss,
             oss::upload_content_to_oss,
+            oss::delete_oss_objects,
             oss::copy_oss_environment_folder,
             oss::copy_oss_node,
             oss::list_oss_directory_tree,
