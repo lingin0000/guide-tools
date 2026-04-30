@@ -14,11 +14,14 @@ export default defineConfig({
   lastUpdated: true,
   themeConfig: {
     nav: [
-      { text: "下载", link: "https://github.com/lingin0000/guide-tools/releases/latest" },
+      {
+        text: "下载",
+        link: "https://github.com/lingin0000/guide-tools/releases/latest",
+      },
       { text: "首页", link: "/" },
       { text: "快速开始", link: "/quick-start" },
       { text: "使用指南", link: "/usage" },
-      { text: "部署托管", link: "/deployment" },
+      // { text: "部署托管", link: "/deployment" },
       { text: "NSIS 离线准备", link: "/nsis-offline" },
     ],
     sidebar: [
@@ -28,7 +31,7 @@ export default defineConfig({
           { text: "项目概览", link: "/" },
           { text: "快速开始", link: "/quick-start" },
           { text: "使用指南", link: "/usage" },
-          { text: "部署托管", link: "/deployment" },
+          // { text: "部署托管", link: "/deployment" },
           { text: "NSIS 离线准备", link: "/nsis-offline" },
         ],
       },
@@ -40,7 +43,8 @@ export default defineConfig({
       },
     ],
     footer: {
-      message: "基于 VitePress 构建，可部署到 GitHub Pages、Cloudflare Pages、Netlify、Vercel。",
+      message:
+        "基于 VitePress 构建，可部署到 GitHub Pages、Cloudflare Pages、Netlify、Vercel。",
       copyright: "Copyright © Guide Tools",
     },
     search: {
