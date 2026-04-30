@@ -1,13 +1,17 @@
 {
   "name": "guide_tools",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "version:bump": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\bump-version.ps1",
+    "version:patch": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\bump-version.ps1 patch",
+    "version:minor": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\bump-version.ps1 minor",
+    "version:major": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\bump-version.ps1 major",
     "tauri:tools:nsis": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\setup-tauri-nsis.ps1",
     "tauri:tools:nsis:mirror": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\setup-tauri-nsis.ps1 -MirrorPrefix \"https://ghproxy.com/\""
   },
