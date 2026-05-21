@@ -34,6 +34,7 @@ import { DEFAULT_UPDATER_ENDPOINT } from "../utils/updateConfig";
 
 const { Header } = Layout;
 const { Text, Title } = Typography;
+const STARTUP_UPDATE_CHECK_DELAY_MS = 3000;
 
 interface CheckUpdateOptions {
   silentNoUpdate?: boolean;
@@ -275,7 +276,15 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     }
 
     hasStartupCheckedUpdateRef.current = true;
-    void handleCheckUpdate({ silentNoUpdate: true });
+
+    // 启动阶段延迟几秒再检查更新，避免和首屏初始化竞争资源。
+    const timer = window.setTimeout(() => {
+      void handleCheckUpdate({ silentNoUpdate: true });
+    }, STARTUP_UPDATE_CHECK_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
   }, [handleCheckUpdate]);
 
   React.useEffect(() => {
