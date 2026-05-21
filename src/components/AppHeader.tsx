@@ -35,6 +35,10 @@ import { DEFAULT_UPDATER_ENDPOINT } from "../utils/updateConfig";
 const { Header } = Layout;
 const { Text, Title } = Typography;
 
+interface CheckUpdateOptions {
+  silentNoUpdate?: boolean;
+}
+
 interface AppHeaderProps {
   activePage: "editor" | "explorer";
   ossConfig: any;
@@ -88,6 +92,8 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   const [isInstallingUpdate, setIsInstallingUpdate] = React.useState(false);
   const [updateStatusText, setUpdateStatusText] = React.useState("");
   const [latestVersion, setLatestVersion] = React.useState<string | null>(null);
+  const hasAutoCheckedUpdateRef = React.useRef(false);
+  const hasStartupCheckedUpdateRef = React.useRef(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -173,84 +179,118 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     }
   };
 
-  const handleCheckUpdate = async () => {
-    if (isCheckingUpdate || isInstallingUpdate) {
-      return;
-    }
+  const handleCheckUpdate = React.useCallback(
+    async (options?: CheckUpdateOptions) => {
+      const { silentNoUpdate = false } = options || {};
 
-    try {
-      if (!DEFAULT_UPDATER_ENDPOINT) {
-        message.warning("请先在应用配置中设置默认更新地址");
+      if (isCheckingUpdate || isInstallingUpdate) {
         return;
       }
 
-      setIsCheckingUpdate(true);
-      setUpdateStatusText("正在检查更新...");
-      setLatestVersion(null);
-      const update = await check();
-
-      if (!update) {
-        setUpdateStatusText("当前已是最新版本");
-        message.success("当前已是最新版本");
-        return;
-      }
-
-      setLatestVersion(update.version);
-      setUpdateStatusText(`发现新版本 ${update.version}，准备下载并安装`);
-
-      const confirmed = await ask(
-        `检测到新版本 ${update.version}，是否立即下载并安装？`,
-        {
-          title: "发现新版本",
-          kind: "info",
-          okLabel: "立即更新",
-          cancelLabel: "稍后再说",
-        },
-      );
-      if (!confirmed) {
-        setUpdateStatusText(`已发现新版本 ${update.version}，你可以稍后安装`);
-        return;
-      }
-
-      setIsInstallingUpdate(true);
-      setUpdateStatusText("正在下载更新...");
-      let downloadedBytes = 0;
-      let totalBytes = 0;
-      await update.downloadAndInstall((event) => {
-        if (event.event === "Started") {
-          totalBytes = event.data.contentLength || 0;
-          setUpdateStatusText("开始下载更新包...");
+      try {
+        if (!DEFAULT_UPDATER_ENDPOINT) {
+          if (!silentNoUpdate) {
+            message.warning("请先在应用配置中设置默认更新地址");
+          }
           return;
         }
-        if (event.event === "Progress") {
-          downloadedBytes += event.data.chunkLength;
-          if (!totalBytes) {
-            setUpdateStatusText("正在下载更新包...");
+
+        setIsCheckingUpdate(true);
+        setUpdateStatusText("正在检查更新...");
+        setLatestVersion(null);
+        const update = await check();
+
+        if (!update) {
+          setUpdateStatusText(silentNoUpdate ? "" : "当前已是最新版本");
+          if (!silentNoUpdate) {
+            message.success("当前已是最新版本");
+          }
+          return;
+        }
+
+        setLatestVersion(update.version);
+        setUpdateStatusText(`发现新版本 ${update.version}，准备下载并安装`);
+
+        const confirmed = await ask(
+          `检测到新版本 ${update.version}，是否立即下载并安装？`,
+          {
+            title: "发现新版本",
+            kind: "info",
+            okLabel: "立即更新",
+            cancelLabel: "稍后再说",
+          },
+        );
+        if (!confirmed) {
+          setUpdateStatusText(`已发现新版本 ${update.version}，你可以稍后安装`);
+          return;
+        }
+
+        setIsInstallingUpdate(true);
+        setUpdateStatusText("正在下载更新...");
+        let downloadedBytes = 0;
+        let totalBytes = 0;
+        await update.downloadAndInstall((event) => {
+          if (event.event === "Started") {
+            totalBytes = event.data.contentLength || 0;
+            setUpdateStatusText("开始下载更新包...");
+            return;
+          }
+          if (event.event === "Progress") {
+            downloadedBytes += event.data.chunkLength;
+            if (!totalBytes) {
+              setUpdateStatusText("正在下载更新包...");
+              return;
+            }
+
+            const progress = Math.min(
+              100,
+              Math.round((downloadedBytes / totalBytes) * 100),
+            );
+            setUpdateStatusText(`正在下载更新包... ${progress}%`);
             return;
           }
 
-          const progress = Math.min(
-            100,
-            Math.round((downloadedBytes / totalBytes) * 100),
-          );
-          setUpdateStatusText(`正在下载更新包... ${progress}%`);
-          return;
+          setUpdateStatusText("下载完成，正在安装更新...");
+        });
+
+        setUpdateStatusText("更新安装完成，正在重启应用...");
+        message.success("更新已安装，应用即将重启");
+        await relaunch();
+      } catch (error) {
+        setUpdateStatusText("");
+        if (!silentNoUpdate) {
+          message.error(`检查更新失败：${String(error)}`);
         }
+      } finally {
+        setIsCheckingUpdate(false);
+        setIsInstallingUpdate(false);
+      }
+    },
+    [isCheckingUpdate, isInstallingUpdate],
+  );
 
-        setUpdateStatusText("下载完成，正在安装更新...");
-      });
-
-      setUpdateStatusText("更新安装完成，正在重启应用...");
-      message.success("更新已安装，应用即将重启");
-      await relaunch();
-    } catch (error) {
-      setUpdateStatusText("");
-      message.error(`检查更新失败：${String(error)}`);
-    } finally {
-      setIsCheckingUpdate(false);
-      setIsInstallingUpdate(false);
+  React.useEffect(() => {
+    if (hasStartupCheckedUpdateRef.current) {
+      return;
     }
-  };
+
+    hasStartupCheckedUpdateRef.current = true;
+    void handleCheckUpdate({ silentNoUpdate: true });
+  }, [handleCheckUpdate]);
+
+  React.useEffect(() => {
+    if (!updateModalOpen) {
+      hasAutoCheckedUpdateRef.current = false;
+      return;
+    }
+
+    if (hasAutoCheckedUpdateRef.current) {
+      return;
+    }
+
+    hasAutoCheckedUpdateRef.current = true;
+    void handleCheckUpdate();
+  }, [handleCheckUpdate, updateModalOpen]);
 
   return (
     <Header

@@ -1,5 +1,7 @@
 import React from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   Button,
   Drawer,
@@ -55,6 +57,21 @@ interface OSSClipboardNode {
   title: string;
   node_type: "directory" | "file";
 }
+
+interface OSSDownloadProgressPayload {
+  task_id: string;
+  current_item: string;
+  completed: number;
+  total: number;
+  stage: "preparing" | "downloading" | "completed" | string;
+}
+
+interface OSSDownloadResult {
+  saved_path: string;
+  total_items: number;
+}
+
+type DownloadMode = "markdown-only" | "markdown-with-assets";
 
 interface TreeDataNode extends DataNode {
   key: string;
@@ -120,6 +137,8 @@ const formatLastModified = (value?: string | null) => {
     hour12: false,
   }).format(parsedDate);
 };
+
+const isMarkdownFilePath = (path: string) => /\.md$/i.test(path.trim());
 
 const updateTreeNodes = (
   nodes: TreeDataNode[],
@@ -310,10 +329,111 @@ const FileExplorerPage: React.FC<FileExplorerPageProps> = ({ ossConfig }) => {
     [ossConfig]
   );
 
+  const handleDownloadNode = React.useCallback(
+    async (node: TreeDataNode, mode: DownloadMode) => {
+      if (node.isLeaf && !isMarkdownFilePath(node.path)) {
+        message.warning("当前仅支持下载 Markdown 文件");
+        return;
+      }
+
+      const selected = await openDialog({
+        directory: true,
+        multiple: false,
+        title: node.isLeaf ? "选择文件下载目录" : "选择文件夹下载目录",
+      });
+      if (!selected || Array.isArray(selected)) {
+        return;
+      }
+
+      const taskId = `oss-download-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const messageKey = taskId;
+      const includeAssets = mode === "markdown-with-assets";
+      const modeLabel = includeAssets ? "Markdown + 图片" : "仅 Markdown";
+      // 先注册事件监听，再触发下载，避免漏掉下载开始时的进度事件。
+      const unlisten = await listen<OSSDownloadProgressPayload>(
+        "oss-download-progress",
+        (event) => {
+          const progress = event.payload;
+          if (progress.task_id !== taskId) {
+            return;
+          }
+
+          const progressText =
+            progress.total > 0
+              ? `${progress.completed}/${progress.total}`
+              : `${progress.completed}`;
+          const content = `${modeLabel} 下载中：${progress.current_item} (${progressText})`;
+
+          message.open({
+            key: messageKey,
+            type: progress.stage === "completed" ? "success" : "loading",
+            content:
+              progress.stage === "completed"
+                ? `${modeLabel} 下载完成`
+                : content,
+            duration: progress.stage === "completed" ? 2 : 0,
+          });
+        },
+      );
+
+      try {
+        const downloadResult = node.isLeaf
+          ? await invoke<OSSDownloadResult>("download_oss_markdown_file", {
+              ossConfig,
+              objectKey: node.path,
+              targetDir: selected,
+              taskId,
+              includeAssets,
+            })
+          : await invoke<OSSDownloadResult>("download_oss_markdown_directory", {
+              ossConfig,
+              prefix: node.path,
+              targetDir: selected,
+              taskId,
+              includeAssets,
+            });
+
+        message.open({
+          key: messageKey,
+          type: "success",
+          content: `${modeLabel} 已下载到 ${downloadResult.saved_path}，共 ${downloadResult.total_items} 项`,
+          duration: 4,
+        });
+      } catch (error) {
+        console.error("OSS 下载失败:", error);
+        message.open({
+          key: messageKey,
+          type: "error",
+          content: `OSS 下载失败：${String(error)}`,
+          duration: 3,
+        });
+      } finally {
+        unlisten();
+      }
+    },
+    [ossConfig],
+  );
+
   const renderNodeTitle = React.useCallback(
     (node: TreeDataNode) => {
-      const pasteTargetDir = node.isLeaf ? getParentPath(node.path, rootPrefix) : node.path;
+      const pasteTargetDir = node.isLeaf
+        ? getParentPath(node.path, rootPrefix)
+        : node.path;
+      const canDownloadCurrentNode =
+        !node.isLeaf || isMarkdownFilePath(node.path);
       const menuItems = [
+        ...(canDownloadCurrentNode
+          ? [
+              {
+                key: "download-markdown-only",
+                label: "仅下载 Markdown",
+              },
+              {
+                key: "download-markdown-with-assets",
+                label: "下载 Markdown + 图片",
+              },
+            ]
+          : []),
         {
           key: "copy",
           label: node.isLeaf ? "复制文件" : "复制文件夹",
@@ -334,6 +454,14 @@ const FileExplorerPage: React.FC<FileExplorerPageProps> = ({ ossConfig }) => {
               domEvent.preventDefault();
               domEvent.stopPropagation();
               suppressTreeSelect();
+              if (key === "download-markdown-only") {
+                void handleDownloadNode(node, "markdown-only");
+                return;
+              }
+              if (key === "download-markdown-with-assets") {
+                void handleDownloadNode(node, "markdown-with-assets");
+                return;
+              }
               if (key === "copy") {
                 handleCopyNode({
                   path: node.path,
@@ -361,20 +489,33 @@ const FileExplorerPage: React.FC<FileExplorerPageProps> = ({ ossConfig }) => {
             className="oss-tree-row"
           >
             <Tooltip title={node.title} mouseEnterDelay={0.4}>
-              <span className={`oss-tree-name ${node.isLeaf ? "is-file" : "is-directory"}`}>
+              <span
+                className={`oss-tree-name ${node.isLeaf ? "is-file" : "is-directory"}`}
+              >
                 {node.title}
               </span>
             </Tooltip>
             {node.isLeaf ? (
               <Text type="secondary" className="oss-tree-time">
-                {node.lastModified ? formatLastModified(node.lastModified) : "--"}
+                {node.lastModified
+                  ? formatLastModified(node.lastModified)
+                  : "--"}
               </Text>
-            ) : <span className="oss-tree-time oss-tree-time-placeholder" />}
+            ) : (
+              <span className="oss-tree-time oss-tree-time-placeholder" />
+            )}
           </div>
         </Dropdown>
       );
     },
-    [clipboardNode, handleCopyNode, handlePasteNode, rootPrefix, suppressTreeSelect]
+    [
+      clipboardNode,
+      handleCopyNode,
+      handleDownloadNode,
+      handlePasteNode,
+      rootPrefix,
+      suppressTreeSelect,
+    ],
   );
 
   return (
@@ -413,7 +554,8 @@ const FileExplorerPage: React.FC<FileExplorerPageProps> = ({ ossConfig }) => {
               <Text code>{rootPrefix}</Text>
             </Space>
             <Text type="secondary">
-              右键节点可复制，右键目录可粘贴到当前目录，右键文件可粘贴到同级目录。
+              右键 Markdown 节点可选择“仅下载 Markdown”或“下载 Markdown +
+              图片”，右键目录可粘贴到当前目录，右键文件可粘贴到同级目录。
             </Text>
           </div>
           <Space wrap>
@@ -475,7 +617,11 @@ const FileExplorerPage: React.FC<FileExplorerPageProps> = ({ ossConfig }) => {
           ) : treeDataSource.length > 0 ? (
             <div
               className="oss-tree-panel"
-              style={{ minHeight: 0, overflow: "auto", padding: "8px 12px 12px" }}
+              style={{
+                minHeight: 0,
+                overflow: "auto",
+                padding: "8px 12px 12px",
+              }}
             >
               <Tree<TreeDataNode>
                 className="oss-file-tree"
@@ -529,8 +675,9 @@ const FileExplorerPage: React.FC<FileExplorerPageProps> = ({ ossConfig }) => {
             items={[
               {
                 key: "preview",
-                label: previewFile.content_type === "markdown" ? "预览" : "文本预览",
-                children: (
+                label:
+                  previewFile.content_type === "markdown" ? "预览" : "文本预览",
+                children:
                   previewFile.content_type === "markdown" ? (
                     <MarkdownPreview
                       content={previewFile.preview_content}
@@ -548,8 +695,7 @@ const FileExplorerPage: React.FC<FileExplorerPageProps> = ({ ossConfig }) => {
                     >
                       {previewFile.content}
                     </pre>
-                  )
-                ),
+                  ),
               },
               {
                 key: "source",

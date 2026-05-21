@@ -693,13 +693,18 @@ fn deduplicate_image_refs(
 async fn prepare_markdown_downloads(
     markdown_keys: Vec<String>,
     oss_config: &OSSConfig,
+    include_assets: bool,
 ) -> Result<Vec<(String, String, Vec<(String, String)>)>, OSSError> {
     let endpoint = oss_config.get_endpoint();
     let mut prepared = Vec::new();
 
     for markdown_key in markdown_keys {
         let markdown_content = read_oss_object_text(oss_config, &markdown_key).await?;
-        let image_refs = deduplicate_image_refs(&markdown_content, &markdown_key, &endpoint);
+        let image_refs = if include_assets {
+            deduplicate_image_refs(&markdown_content, &markdown_key, &endpoint)
+        } else {
+            Vec::new()
+        };
         prepared.push((markdown_key, markdown_content, image_refs));
     }
 
@@ -726,6 +731,7 @@ async fn download_prepared_markdowns(
     oss_config: &OSSConfig,
     app_handle: &tauri::AppHandle,
     task_id: &str,
+    include_assets: bool,
 ) -> Result<OSSDownloadResult, OSSError> {
     let total_items = prepared_markdowns
         .iter()
@@ -777,7 +783,12 @@ async fn download_prepared_markdowns(
             );
         }
 
-        let rewritten_markdown = replace_markdown_image_paths(&markdown_content, &image_mappings);
+        // 仅在同时下载图片时才改写 Markdown 中的图片相对路径。
+        let rewritten_markdown = if include_assets {
+            replace_markdown_image_paths(&markdown_content, &image_mappings)
+        } else {
+            markdown_content
+        };
         fs::write(&local_markdown_path, rewritten_markdown)?;
         mappings.push(OSSLocalPathMapping {
             object_key: markdown_key.clone(),
@@ -1287,6 +1298,7 @@ pub async fn download_oss_markdown_directory(
     prefix: String,
     target_dir: String,
     task_id: String,
+    include_assets: bool,
 ) -> Result<OSSDownloadResult, String> {
     let result = async {
         oss_config.validate()?;
@@ -1299,7 +1311,8 @@ pub async fn download_oss_markdown_directory(
         if markdown_keys.is_empty() {
             return Err(OSSError::InvalidPath("当前目录下没有 Markdown 文件".to_string()));
         }
-        let prepared_markdowns = prepare_markdown_downloads(markdown_keys, &oss_config).await?;
+        let prepared_markdowns =
+            prepare_markdown_downloads(markdown_keys, &oss_config, include_assets).await?;
         download_prepared_markdowns(
             prepared_markdowns,
             &selected_prefix,
@@ -1308,6 +1321,7 @@ pub async fn download_oss_markdown_directory(
             &oss_config,
             &app_handle,
             &task_id,
+            include_assets,
         )
         .await
     }
@@ -1323,6 +1337,7 @@ pub async fn download_oss_markdown_file(
     object_key: String,
     target_dir: String,
     task_id: String,
+    include_assets: bool,
 ) -> Result<OSSDownloadResult, String> {
     let result = async {
         oss_config.validate()?;
@@ -1333,7 +1348,8 @@ pub async fn download_oss_markdown_file(
             .unwrap_or_default();
         let selected_prefix = normalize_oss_prefix(&selected_prefix);
         let root_prefix = normalize_oss_prefix(&oss_config.get_oss_dir());
-        let prepared_markdowns = prepare_markdown_downloads(markdown_keys, &oss_config).await?;
+        let prepared_markdowns =
+            prepare_markdown_downloads(markdown_keys, &oss_config, include_assets).await?;
         download_prepared_markdowns(
             prepared_markdowns,
             &selected_prefix,
@@ -1342,6 +1358,7 @@ pub async fn download_oss_markdown_file(
             &oss_config,
             &app_handle,
             &task_id,
+            include_assets,
         )
         .await
     }
